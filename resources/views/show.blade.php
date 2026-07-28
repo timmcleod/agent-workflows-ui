@@ -56,6 +56,8 @@
     .node.running .dot { background: var(--blue); animation: pulse 1s infinite; }
     .node.queued { border-style: dashed; border-color: color-mix(in srgb, var(--blue) 60%, transparent); }
     .node.queued .dot { background: var(--blue); }
+    .node.stalled { border-style: dashed; border-color: color-mix(in srgb, var(--amber) 55%, transparent); }
+    .node.stalled .dot { background: var(--amber); animation: pulse 1.6s infinite; }
     .node.failed { border-color: var(--red); box-shadow: 0 0 0 3px color-mix(in srgb, var(--red) 20%, transparent); }
     .node.failed .dot { background: var(--red); }
     .node.waiting { border-color: var(--amber); box-shadow: 0 0 0 3px color-mix(in srgb, var(--amber) 18%, transparent); }
@@ -125,6 +127,14 @@
     </section>
 
     <aside>
+        <div id="stalled-panel" class="side-section" style="display:none;">
+            <h3>⏳ Waiting for a queue worker</h3>
+            <div class="muted" style="font-size:13px;">
+                This run is queued, but no worker has claimed its next step.
+                It will sit here until one runs:
+            </div>
+            <pre class="mono" style="margin:8px 0 0; white-space:pre-wrap;">php artisan queue:work</pre>
+        </div>
         <div id="interrupt-panel" class="side-section" style="display:none;"></div>
         <div id="failure-panel" class="side-section" style="display:none;"></div>
 
@@ -244,7 +254,9 @@
                 const chosen = DATA.run.state?.steps?.[node.branchOf]?.branch;
                 if (chosen && chosen !== id) return 'skipped';
             }
-            if (DATA.run.current_step === id && DATA.run.status === 'pending') return 'queued';
+            if (DATA.run.current_step === id && DATA.run.status === 'pending') {
+                return DATA.run.stalled ? 'stalled' : 'queued';
+            }
             return 'idle';
         }
 
@@ -269,8 +281,8 @@
     }
 
     const STATUS_TEXT = {
-        idle: 'not run', queued: 'queued', running: 'running…', completed: 'completed',
-        failed: 'failed', waiting: 'waiting', skipped: 'skipped',
+        idle: 'not run', queued: 'queued', stalled: 'queued — no worker?', running: 'running…',
+        completed: 'completed', failed: 'failed', waiting: 'waiting', skipped: 'skipped',
     };
 
     function applyData() {
@@ -311,6 +323,7 @@
         chip.textContent = statusLabel(DATA.run.status);
 
         document.getElementById('drift-badge').style.display = DATA.run.drifted ? '' : 'none';
+        document.getElementById('stalled-panel').style.display = DATA.run.stalled ? '' : 'none';
         document.getElementById('retry-form').style.display = DATA.run.status === 'failed' ? '' : 'none';
         document.getElementById('cancel-form').style.display =
             ['completed', 'cancelled'].includes(DATA.run.status) ? 'none' : '';

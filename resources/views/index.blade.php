@@ -40,7 +40,7 @@
             <tr onclick="location.href='${RUNS_BASE}/${r.id}'">
                 <td class="mono">${r.id.slice(-8)}</td>
                 <td>${r.name}</td>
-                <td><span class="chip ${r.status}">${statusLabel(r.status)}</span></td>
+                <td><span class="chip ${r.status}" ${r.stalled ? 'title="Queued, but no worker has claimed the next step — is a queue worker running?"' : ''}>${r.stalled ? 'queued — no worker?' : statusLabel(r.status)}</span></td>
                 <td class="mono muted">${r.failed_step ?? r.current_step ?? '—'}</td>
                 <td class="muted">${r.steps_count}</td>
                 <td class="muted">${timeAgo(r.created_at)}</td>

@@ -7,6 +7,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
+use TimMcLeod\AgentWorkflows\Enums\RunStatus;
 use TimMcLeod\AgentWorkflows\Exceptions\WorkflowException;
 use TimMcLeod\AgentWorkflows\Models\WorkflowRun;
 use TimMcLeod\AgentWorkflows\WorkflowRegistry;
@@ -34,6 +35,7 @@ class DashboardController
                 'current_step' => $run->current_step,
                 'failed_step' => $run->failed_step,
                 'steps_count' => $run->steps_count,
+                'stalled' => $this->isStalled($run),
                 'started_at' => $run->started_at?->toIso8601String(),
                 'finished_at' => $run->finished_at?->toIso8601String(),
                 'created_at' => $run->created_at->toIso8601String(),
@@ -115,6 +117,20 @@ class DashboardController
     }
 
     /**
+     * A queued run nobody has claimed for a while — the strongest available
+     * signal that no queue worker is running. Heuristic by design: the
+     * dashboard cannot portably inspect the queue backend itself.
+     */
+    protected function isStalled(WorkflowRun $run): bool
+    {
+        $threshold = config('agent-workflows-ui.stalled_after');
+
+        return $threshold !== null
+            && $run->status === RunStatus::Pending
+            && $run->updated_at->lte(now()->subSeconds((int) $threshold));
+    }
+
+    /**
      * @return array<string, mixed>
      */
     protected function runPayload(WorkflowRun $run): array
@@ -137,6 +153,7 @@ class DashboardController
                 'finished_at' => $run->finished_at?->toIso8601String(),
                 'state' => $run->state,
                 'drifted' => $definition !== null && $definition->hash() !== $run->version,
+                'stalled' => $this->isStalled($run),
             ],
             'steps' => $run->steps()->orderBy('id')->get()->map(fn ($step) => [
                 'step_id' => $step->step_id,

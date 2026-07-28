@@ -161,6 +161,49 @@ it('marks drifted runs in the payload', function () {
         ->assertJsonPath('run.drifted', true);
 });
 
+it('flags a run stuck in pending as stalled once the threshold passes', function () {
+    authorizeDashboard();
+
+    $run = AgentWorkflow::start('signoff-flow', []);
+    $run->updateQuietly(['status' => RunStatus::Pending, 'updated_at' => now()->subSeconds(30)]);
+
+    $this->getJson(route('agent-workflows.show.data', $run))
+        ->assertJsonPath('run.stalled', true);
+
+    $this->getJson(route('agent-workflows.data'))
+        ->assertJsonPath('runs.0.stalled', true);
+});
+
+it('does not flag fresh pending runs or parked runs as stalled', function () {
+    authorizeDashboard();
+
+    $run = AgentWorkflow::start('signoff-flow', []);
+
+    // Parked awaiting a human for ages: waiting is its job, not a stall.
+    $run->updateQuietly(['updated_at' => now()->subSeconds(300)]);
+
+    $this->getJson(route('agent-workflows.show.data', $run))
+        ->assertJsonPath('run.status', 'awaiting_human')
+        ->assertJsonPath('run.stalled', false);
+
+    $run->updateQuietly(['status' => RunStatus::Pending, 'updated_at' => now()]);
+
+    $this->getJson(route('agent-workflows.show.data', $run))
+        ->assertJsonPath('run.stalled', false);
+});
+
+it('disables the stalled hint when the threshold is null', function () {
+    authorizeDashboard();
+
+    config(['agent-workflows-ui.stalled_after' => null]);
+
+    $run = AgentWorkflow::start('signoff-flow', []);
+    $run->updateQuietly(['status' => RunStatus::Pending, 'updated_at' => now()->subSeconds(300)]);
+
+    $this->getJson(route('agent-workflows.show.data', $run))
+        ->assertJsonPath('run.stalled', false);
+});
+
 it('honours the configured path prefix', function () {
     expect(route('agent-workflows.index', absolute: false))->toBe('/agent-workflows');
 });

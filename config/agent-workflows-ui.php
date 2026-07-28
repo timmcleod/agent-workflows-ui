@@ -56,4 +56,18 @@ return [
 
     'runs' => 50,
 
+    /*
+    |--------------------------------------------------------------------------
+    | Stalled Threshold
+    |--------------------------------------------------------------------------
+    |
+    | A run that stays queued (pending) longer than this many seconds with no
+    | worker claiming its next step is flagged in the dashboard, since a
+    | pending run with no running worker otherwise looks healthy forever.
+    | Set to null to disable the hint.
+    |
+    */
+
+    'stalled_after' => 10,
+
 ];
