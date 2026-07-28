@@ -316,14 +316,27 @@
             ['completed', 'cancelled'].includes(DATA.run.status) ? 'none' : '';
     }
 
+    // Rebuilding the panel's innerHTML on every poll would wipe whatever
+    // the reviewer has typed or selected, so it only re-renders when the
+    // interrupt itself changes.
+    let interruptKey = null;
+
     function renderInterrupt() {
         const panel = document.getElementById('interrupt-panel');
 
         if (!DATA.interrupt || !['awaiting_human', 'awaiting_event'].includes(DATA.run.status)) {
+            interruptKey = null;
             panel.style.display = 'none';
             return;
         }
 
+        const key = [DATA.run.status, DATA.interrupt.step_id, DATA.interrupt.type, DATA.interrupt.created_at].join('|');
+
+        if (key === interruptKey) {
+            return;
+        }
+
+        interruptKey = key;
         panel.style.display = '';
 
         if (DATA.interrupt.type === 'event') {
