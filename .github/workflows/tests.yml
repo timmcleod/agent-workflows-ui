@@ -1,0 +1,70 @@
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    # Weekly run against core@main via the path repository — early warning
+    # when a core change breaks the dashboard.
+    - cron: '0 7 * * 1'
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        php: ['8.3', '8.4']
+        laravel: ['12.*', '13.*']
+
+    name: PHP ${{ matrix.php }} / Laravel ${{ matrix.laravel }}
+
+    steps:
+      # The composer.json path repository points at ../agent-workflows, so
+      # tests always run against the core package's current main.
+      - uses: actions/checkout@v4
+        with:
+          path: ui
+
+      - uses: actions/checkout@v4
+        with:
+          repository: timmcleod/agent-workflows
+          path: agent-workflows
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          coverage: none
+
+      - name: Install dependencies
+        working-directory: ui
+        run: |
+          composer require "illuminate/support:${{ matrix.laravel }}" --no-interaction --no-update
+          composer update --prefer-dist --no-interaction
+
+      - name: Run tests
+        working-directory: ui
+        run: vendor/bin/pest
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: ui
+      - uses: actions/checkout@v4
+        with:
+          repository: timmcleod/agent-workflows
+          path: agent-workflows
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          coverage: none
+      - working-directory: ui
+        run: composer update --prefer-dist --no-interaction
+      - working-directory: ui
+        run: vendor/bin/pint --test
+      - working-directory: ui
+        run: vendor/bin/phpstan analyse --no-progress

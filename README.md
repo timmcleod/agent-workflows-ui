@@ -1,5 +1,8 @@
 # Agent Workflows UI
 
+[![tests](https://github.com/timmcleod/agent-workflows-ui/actions/workflows/tests.yml/badge.svg)](https://github.com/timmcleod/agent-workflows-ui/actions/workflows/tests.yml)
+[![Latest Version](https://img.shields.io/packagist/v/timmcleod/agent-workflows-ui)](https://packagist.org/packages/timmcleod/agent-workflows-ui)
+
 A dashboard for [`timmcleod/agent-workflows`](https://github.com/timmcleod/agent-workflows). Install it alongside the core package and get a live view of every workflow run: the definition rendered as a flowchart with each step's status overlaid, the step-by-step audit trail with attempts and token counts, and the checkpointed state bag.
 
 ![The dashboard: a completed run rendered as a flowchart, the taken branch highlighted and the untaken branch dimmed, with the step-attempt audit trail alongside](https://raw.githubusercontent.com/timmcleod/agent-workflows-ui/main/art/dashboard.png)
