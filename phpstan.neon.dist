@@ -1,0 +1,12 @@
+includes:
+    - vendor/larastan/larastan/extension.neon
+
+parameters:
+    level: 6
+    paths:
+        - src
+    treatPhpDocTypesAsCertain: false
+    ignoreErrors:
+        # Package views are registered at boot; larastan cannot see the
+        # "agent-workflows-ui::" namespace statically.
+        - '#expects view-string#'
