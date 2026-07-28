@@ -2,6 +2,10 @@
 
 A dashboard for [`timmcleod/agent-workflows`](https://github.com/timmcleod/agent-workflows). Install it alongside the core package and get a live view of every workflow run: the definition rendered as a flowchart with each step's status overlaid, the step-by-step audit trail with attempts and token counts, and the checkpointed state bag.
 
+![The dashboard: a run paused at a human sign-off gate, with the taken branch highlighted, a failed-then-retried step in the audit trail, and the approval form generated from the step's schema](https://raw.githubusercontent.com/timmcleod/agent-workflows-ui/main/art/dashboard.png)
+
+One run, most of the package: this workflow failed at its enrichment step (attempt #1, error inline), was retried from the checkpoint — note the agent steps above it still show a single attempt; their tokens were paid once — took the high-risk escalation branch (the auto-approve branch dimmed as skipped), and is now parked at the amber human gate. The form on the right was generated from the step's validation rules; submitting it resumes the run.
+
 It is not read-only where it matters:
 
 - **Approve from the browser.** Runs parked by `awaitHuman()` show a form generated from the step's validation schema; submitting it calls `resume()` and the run continues.
