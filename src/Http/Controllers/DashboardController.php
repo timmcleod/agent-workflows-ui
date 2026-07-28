@@ -21,12 +21,24 @@ class DashboardController
         return view('agent-workflows-ui::index');
     }
 
-    public function indexData(): JsonResponse
+    public function indexData(Request $request): JsonResponse
     {
+        $statuses = match ($request->query('status')) {
+            'active' => [RunStatus::Pending, RunStatus::Running],
+            'awaiting' => [RunStatus::AwaitingHuman, RunStatus::AwaitingEvent],
+            'completed' => [RunStatus::Completed],
+            'failed' => [RunStatus::Failed],
+            'cancelled' => [RunStatus::Cancelled],
+            default => null,
+        };
+
         $runs = WorkflowRun::query()
+            ->when($statuses !== null, fn ($query) => $query->whereIn('status', $statuses))
+            ->when($request->filled('workflow'), fn ($query) => $query->where('name', $request->query('workflow')))
             ->latest('id')
             ->limit((int) config('agent-workflows-ui.runs', 50))
             ->withCount('steps')
+            ->with(['steps' => fn ($query) => $query->select('run_id', 'usage')])
             ->get()
             ->map(fn (WorkflowRun $run) => [
                 'id' => $run->id,
@@ -36,12 +48,16 @@ class DashboardController
                 'failed_step' => $run->failed_step,
                 'steps_count' => $run->steps_count,
                 'stalled' => $this->isStalled($run),
+                'tokens' => $run->steps->sum(fn ($step) => ($step->usage['prompt_tokens'] ?? 0) + ($step->usage['completion_tokens'] ?? 0)),
                 'started_at' => $run->started_at?->toIso8601String(),
                 'finished_at' => $run->finished_at?->toIso8601String(),
                 'created_at' => $run->created_at->toIso8601String(),
             ]);
 
-        return response()->json(['runs' => $runs]);
+        return response()->json([
+            'runs' => $runs,
+            'workflows' => WorkflowRun::query()->select('name')->distinct()->orderBy('name')->pluck('name'),
+        ]);
     }
 
     public function show(WorkflowRun $run): View
@@ -100,6 +116,39 @@ class DashboardController
             $run->retry();
         } catch (WorkflowException $e) {
             return back()->withErrors(['retry' => $e->getMessage()]);
+        }
+
+        return redirect()->route('agent-workflows.show', $run);
+    }
+
+    /**
+     * Deliver the application event a run parked by awaitEvent() is waiting
+     * for, with an optional JSON payload merged into state.
+     */
+    public function deliver(Request $request, WorkflowRun $run): RedirectResponse
+    {
+        $raw = trim((string) $request->input('payload', ''));
+
+        $payload = [];
+
+        if ($raw !== '') {
+            $payload = json_decode($raw, true);
+
+            if (! is_array($payload)) {
+                return back()->withErrors(['deliver' => 'The payload must be a JSON object.']);
+            }
+        }
+
+        $event = $run->interrupts()->whereNull('resolved_at')->latest('id')->first()?->context['event'] ?? null;
+
+        if ($event === null) {
+            return back()->withErrors(['deliver' => 'This run is not waiting for an event.']);
+        }
+
+        try {
+            $run->deliverEvent($event, $payload);
+        } catch (WorkflowException $e) {
+            return back()->withErrors(['deliver' => $e->getMessage()]);
         }
 
         return redirect()->route('agent-workflows.show', $run);
@@ -171,6 +220,7 @@ class DashboardController
                 'reason' => $interrupt->reason,
                 'response_schema' => $interrupt->response_schema,
                 'context' => $interrupt->context,
+                'timeout_at' => $interrupt->timeout_at?->toIso8601String(),
                 'created_at' => $interrupt->created_at->toIso8601String(),
             ],
         ];

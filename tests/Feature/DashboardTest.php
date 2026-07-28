@@ -204,6 +204,90 @@ it('disables the stalled hint when the threshold is null', function () {
         ->assertJsonPath('run.stalled', false);
 });
 
+it('filters the runs list by status group and workflow name', function () {
+    authorizeDashboard();
+
+    defineWorkflow('other-flow', fn (WorkflowDefinition $workflow) => $workflow
+        ->step(PrepareStep::class));
+
+    $awaiting = AgentWorkflow::start('signoff-flow', []);
+    $done = AgentWorkflow::start('other-flow', []);
+
+    $this->getJson(route('agent-workflows.data', ['status' => 'awaiting']))
+        ->assertJsonCount(1, 'runs')
+        ->assertJsonPath('runs.0.id', $awaiting->id);
+
+    $this->getJson(route('agent-workflows.data', ['status' => 'completed']))
+        ->assertJsonCount(1, 'runs')
+        ->assertJsonPath('runs.0.id', $done->id);
+
+    $this->getJson(route('agent-workflows.data', ['workflow' => 'other-flow']))
+        ->assertJsonCount(1, 'runs')
+        ->assertJsonPath('workflows', ['other-flow', 'signoff-flow']);
+
+    $this->getJson(route('agent-workflows.data'))->assertJsonCount(2, 'runs');
+});
+
+it('reports token totals per run', function () {
+    authorizeDashboard();
+
+    $run = AgentWorkflow::start('signoff-flow', []);
+    $run->steps()->update(['usage' => ['prompt_tokens' => 120, 'completion_tokens' => 30]]);
+
+    $this->getJson(route('agent-workflows.data'))
+        ->assertJsonPath('runs.0.tokens', 300); // 2 steps × 150
+});
+
+it('exposes the interrupt deadline for gates with a timeout', function () {
+    authorizeDashboard();
+
+    defineWorkflow('deadline-flow', fn (WorkflowDefinition $workflow) => $workflow
+        ->awaitHuman(reason: 'Sign off', timeout: 3600));
+
+    $run = AgentWorkflow::start('deadline-flow', []);
+
+    $data = $this->getJson(route('agent-workflows.show.data', $run))->json();
+
+    expect($data['interrupt']['timeout_at'])->not->toBeNull();
+});
+
+it('delivers an awaited event with a JSON payload from the dashboard', function () {
+    authorizeDashboard();
+
+    defineWorkflow('event-flow', fn (WorkflowDefinition $workflow) => $workflow
+        ->awaitEvent('payment.settled')
+        ->step(PrepareStep::class));
+
+    $run = AgentWorkflow::start('event-flow', []);
+
+    expect($run->status)->toBe(RunStatus::AwaitingEvent);
+
+    $this->post(route('agent-workflows.deliver', $run), [
+        'payload' => '{"transaction_id": "tx_42"}',
+    ])->assertRedirect(route('agent-workflows.show', $run));
+
+    $run->refresh();
+
+    expect($run->status)->toBe(RunStatus::Completed)
+        ->and($run->state['transaction_id'])->toBe('tx_42')
+        ->and($run->state['prepared'])->toBeTrue();
+});
+
+it('rejects a malformed event payload without touching the run', function () {
+    authorizeDashboard();
+
+    defineWorkflow('event-flow-2', fn (WorkflowDefinition $workflow) => $workflow
+        ->awaitEvent('payment.settled'));
+
+    $run = AgentWorkflow::start('event-flow-2', []);
+
+    $this->from(route('agent-workflows.show', $run))
+        ->post(route('agent-workflows.deliver', $run), ['payload' => 'not json'])
+        ->assertSessionHasErrors('deliver');
+
+    expect($run->refresh()->status)->toBe(RunStatus::AwaitingEvent);
+});
+
 it('honours the configured path prefix', function () {
     expect(route('agent-workflows.index', absolute: false))->toBe('/agent-workflows');
 });

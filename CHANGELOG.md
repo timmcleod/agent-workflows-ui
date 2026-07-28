@@ -2,6 +2,15 @@
 
 All notable changes to `timmcleod/agent-workflows-ui` are documented here.
 
+## v0.3.0 — 2026-07-28
+
+Requires `timmcleod/agent-workflows` `^0.9`.
+
+- Event gates are actionable: runs parked by `awaitEvent()` get a deliver form (event name from the interrupt, optional JSON payload) instead of a read-only snippet.
+- The runs list filters by status group (Running, Awaiting, Failed, Completed, Cancelled) and by workflow name, and shows per-run token totals.
+- Human gates with an `awaitHuman()` timeout show their deadline ("times out in 2d"), kept fresh without rebuilding the form.
+- The run header shows the run's total token usage.
+
 ## v0.2.2 — 2026-07-28
 
 - Compatibility: allow `timmcleod/agent-workflows` `^0.8` (typed workflow state). No dashboard changes.

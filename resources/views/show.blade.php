@@ -6,6 +6,7 @@
     <a href="{{ route('agent-workflows.index') }}" class="muted">← runs</a>
     <span class="mono faint">{{ $run->id }}</span>
     <span id="run-chip" class="chip {{ $run->status->value }}">{{ $run->status->value }}</span>
+    <span id="run-tokens" class="faint" style="font-size:12px;"></span>
     <span id="drift-badge" class="chip" style="display:none;" title="The registered definition no longer matches the one this run started with">⚠ definition drift</span>
     <span class="spacer"></span>
     <form id="retry-form" method="POST" action="{{ route('agent-workflows.retry', $run) }}" style="display:none;">
@@ -158,6 +159,7 @@
     let DATA = @json($data);
 
     const RESUME_URL = '{{ route('agent-workflows.resume', $run) }}';
+    const DELIVER_URL = '{{ route('agent-workflows.deliver', $run) }}';
     const DATA_URL = '{{ route('agent-workflows.show.data', $run) }}';
 
     const ICONS = {
@@ -335,6 +337,7 @@
 
         renderHeader();
         renderInterrupt();
+        renderDeadline();
         renderFailure();
         renderAttempts();
         renderState();
@@ -345,6 +348,10 @@
         const chip = document.getElementById('run-chip');
         chip.className = 'chip ' + DATA.run.status;
         chip.textContent = statusLabel(DATA.run.status);
+
+        const tokens = DATA.steps.reduce((sum, s) =>
+            sum + (s.usage?.prompt_tokens ?? 0) + (s.usage?.completion_tokens ?? 0), 0);
+        document.getElementById('run-tokens').textContent = tokens > 0 ? tokens.toLocaleString() + ' tok' : '';
 
         document.getElementById('drift-badge').style.display = DATA.run.drifted ? '' : 'none';
         document.getElementById('stalled-panel').style.display = DATA.run.stalled ? '' : 'none';
@@ -380,8 +387,18 @@
             panel.innerHTML = `
                 <h3>⚡ Waiting for event</h3>
                 <div class="reason">${esc(DATA.interrupt.reason ?? '')}</div>
-                <div class="muted" style="font-size:12.5px;">Deliver it from your app:</div>
-                <pre class="mono" style="white-space:pre-wrap;">$run->deliverEvent('${esc(DATA.interrupt.context?.event ?? '')}', [...]);</pre>`;
+                <form method="POST" action="${DELIVER_URL}">
+                    <input type="hidden" name="_token" value="${CSRF}">
+                    <label>payload <span class="faint">(JSON object, optional)</span></label>
+                    <textarea name="payload" rows="3" placeholder='{"transaction_id": "…"}'></textarea>
+                    <div style="margin-top:14px;">
+                        <button class="btn good" style="width:100%;">⚡ Deliver ${esc(DATA.interrupt.context?.event ?? 'event')}</button>
+                    </div>
+                    <div class="faint" style="margin-top:8px; font-size:11.5px;">
+                        Merged into state, then the run continues — same as
+                        <span class="mono">$run->deliverEvent()</span>.
+                    </div>
+                </form>`;
             return;
         }
 
@@ -407,6 +424,7 @@
         panel.innerHTML = `
             <h3>✋ Human input required</h3>
             <div class="reason">${esc(DATA.interrupt.reason ?? 'Waiting for a response')}</div>
+            <div id="interrupt-deadline" class="faint" style="font-size:12px; margin:-6px 0 4px;"></div>
             <form method="POST" action="${RESUME_URL}">
                 <input type="hidden" name="_token" value="${CSRF}">
                 ${fields}
@@ -417,6 +435,25 @@
                     Validated against the step's schema, merged into state, then the run continues.
                 </div>
             </form>`;
+    }
+
+    // Updated outside renderInterrupt so the countdown stays fresh without
+    // rebuilding the form (which would wipe the reviewer's input).
+    function renderDeadline() {
+        const el = document.getElementById('interrupt-deadline');
+        if (!el) return;
+
+        const at = DATA.interrupt?.timeout_at;
+
+        if (!at) {
+            el.textContent = '';
+            return;
+        }
+
+        const s = (new Date(at) - Date.now()) / 1000;
+        el.textContent = s <= 0
+            ? '⏳ Past its deadline — the next sweep acts on it.'
+            : '⏳ Times out in ' + (s < 3600 ? Math.ceil(s / 60) + 'm' : s < 86400 ? Math.round(s / 3600) + 'h' : Math.round(s / 86400) + 'd');
     }
 
     function renderFailure() {
