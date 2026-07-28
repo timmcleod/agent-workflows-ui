@@ -29,7 +29,9 @@
         background-image: radial-gradient(circle, #232b36 1px, transparent 1px);
         background-size: 22px 22px;
     }
-    #edges { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+    /* Sized by drawEdges() to the full scrollable graph — CSS width/height
+       here would override those attributes and clip edges below the fold. */
+    #edges { position: absolute; top: 0; left: 0; pointer-events: none; }
     #graph { position: relative; display: flex; flex-direction: column; align-items: center; gap: 52px; min-width: max-content; margin: 0 auto; }
     .row { display: flex; gap: 56px; justify-content: center; }
 
@@ -115,11 +117,11 @@
     <section id="canvas">
         <svg id="edges">
             <defs>
-                <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
-                    <path d="M 0 1 L 9 5 L 0 9" fill="none" stroke="#3a4552" stroke-width="1.8"/>
+                <marker id="arrow" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                    <path d="M 0 1 L 9 5 L 0 9 Z" fill="#3a4552"/>
                 </marker>
-                <marker id="arrow-active" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
-                    <path d="M 0 1 L 9 5 L 0 9" fill="none" stroke="var(--green)" stroke-width="1.8"/>
+                <marker id="arrow-active" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                    <path d="M 0 1 L 9 5 L 0 9 Z" fill="var(--green)"/>
                 </marker>
             </defs>
         </svg>
@@ -207,36 +209,58 @@
         svg.querySelectorAll('path.edge, text.edge-label').forEach(el => el.remove());
         svg.setAttribute('width', canvas.scrollWidth);
         svg.setAttribute('height', canvas.scrollHeight);
+        svg.style.width = canvas.scrollWidth + 'px';
+        svg.style.height = canvas.scrollHeight + 'px';
 
         const base = graphEl.getBoundingClientRect();
         const ox = graphEl.offsetLeft, oy = graphEl.offsetTop;
 
-        for (const e of GRAPH.edges) {
-            const a = nodeEl(e.from)?.getBoundingClientRect();
-            const b = nodeEl(e.to)?.getBoundingClientRect();
-            if (!a || !b) continue;
-
-            const x1 = a.left - base.left + a.width / 2 + ox, y1 = a.bottom - base.top + oy;
-            const x2 = b.left - base.left + b.width / 2 + ox, y2 = b.top - base.top + oy - 3;
-            const my = (y1 + y2) / 2;
-
-            const active = edgeActive(e);
-
+        const line = (d, active, marker) => {
             const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-            path.setAttribute('d', `M ${x1} ${y1} C ${x1} ${my}, ${x2} ${my}, ${x2} ${y2}`);
+            path.setAttribute('d', d);
             path.setAttribute('class', 'edge' + (active ? ' active' : ''));
-            path.setAttribute('marker-end', active ? 'url(#arrow-active)' : 'url(#arrow)');
+            if (marker) path.setAttribute('marker-end', active ? 'url(#arrow-active)' : 'url(#arrow)');
             svg.appendChild(path);
+        };
 
-            if (e.label) {
-                const t = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-                t.setAttribute('x', (x1 + x2) / 2 + (x2 > x1 ? 8 : -8));
-                t.setAttribute('y', my - 5);
-                t.setAttribute('text-anchor', x2 >= x1 ? 'start' : 'end');
-                t.setAttribute('class', 'edge-label' + (active ? ' active' : ''));
-                t.textContent = e.label;
-                svg.appendChild(t);
+        // Edges converging on one node meet at a junction above it and share
+        // a single arrowhead — per-edge markers would stack at the same point.
+        const byTarget = new Map();
+
+        for (const e of GRAPH.edges) {
+            if (!byTarget.has(e.to)) byTarget.set(e.to, []);
+            byTarget.get(e.to).push(e);
+        }
+
+        for (const [target, edges] of byTarget) {
+            const b = nodeEl(target)?.getBoundingClientRect();
+            if (!b) continue;
+
+            const x2 = b.left - base.left + b.width / 2 + ox, y2 = b.top - base.top + oy - 3;
+            const jy = y2 - 12;
+
+            for (const e of edges) {
+                const a = nodeEl(e.from)?.getBoundingClientRect();
+                if (!a) continue;
+
+                const x1 = a.left - base.left + a.width / 2 + ox, y1 = a.bottom - base.top + oy;
+                const my = (y1 + jy) / 2;
+                const active = edgeActive(e);
+
+                line(`M ${x1} ${y1} C ${x1} ${my}, ${x2} ${my}, ${x2} ${jy}`, active, false);
+
+                if (e.label) {
+                    const t = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                    t.setAttribute('x', (x1 + x2) / 2 + (x2 > x1 ? 8 : -8));
+                    t.setAttribute('y', my - 5);
+                    t.setAttribute('text-anchor', x2 >= x1 ? 'start' : 'end');
+                    t.setAttribute('class', 'edge-label' + (active ? ' active' : ''));
+                    t.textContent = e.label;
+                    svg.appendChild(t);
+                }
             }
+
+            line(`M ${x2} ${jy} L ${x2} ${y2}`, edges.some(edgeActive), true);
         }
     }
 
