@@ -2,6 +2,10 @@
 
 All notable changes to `timmcleod/agent-workflows-ui` are documented here.
 
+## v0.3.1 — 2026-07-30
+
+- Compatibility: allow `timmcleod/agent-workflows` `^0.10` (hardening release). No dashboard changes. Note for hosts upgrading core: run `php artisan migrate` — core v0.10 ships additive migrations.
+
 ## v0.3.0 — 2026-07-28
 
 Requires `timmcleod/agent-workflows` `^0.9`.
