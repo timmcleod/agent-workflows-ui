@@ -2,6 +2,10 @@
 
 All notable changes to `timmcleod/agent-workflows-ui` are documented here.
 
+## v0.3.2 — 2026-07-30
+
+- Compatibility: allow `timmcleod/agent-workflows` `^0.11` (the `debate()` release). No dashboard changes needed — debate steps render as evaluate-shaped nodes with a `debate · N voices · max R rounds` detail, which the run view already displays.
+
 ## v0.3.1 — 2026-07-30
 
 - Compatibility: allow `timmcleod/agent-workflows` `^0.10` (hardening release). No dashboard changes. Note for hosts upgrading core: run `php artisan migrate` — core v0.10 ships additive migrations.
