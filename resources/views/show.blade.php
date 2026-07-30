@@ -107,6 +107,30 @@
         margin: 0; font-family: var(--mono); font-size: 11.5px; line-height: 1.55;
         white-space: pre-wrap; word-break: break-word; color: var(--muted);
     }
+
+    /* ---- debate progress (in the node) ---- */
+    .node .rounds { margin-top: 8px; display: flex; align-items: center; gap: 5px; flex-wrap: wrap; min-height: 13px; }
+    .node .rounds .pip { width: 9px; height: 9px; border-radius: 50%; border: 1.5px solid var(--border); flex: none; }
+    .node .rounds .pip.done { background: var(--green); border-color: var(--green); }
+    .node .rounds .pip.now { border-color: var(--blue); background: color-mix(in srgb, var(--blue) 35%, transparent); animation: pulse 1.2s infinite; }
+    .node .rounds .outcome { font-size: 11px; margin-left: 3px; color: var(--faint); }
+    .node .rounds .outcome.ok { color: var(--green); }
+    .node .rounds .outcome.cap { color: var(--amber); }
+    .node .rounds .outcome.busy { color: var(--blue); }
+
+    /* ---- debate tab (accordion transcript) ---- */
+    #panel-debate .strip { font-size: 12.5px; margin: 2px 0 12px; font-weight: 650; }
+    #panel-debate .strip.ok { color: var(--green); }
+    #panel-debate .strip.cap { color: var(--amber); }
+    #panel-debate .strip.busy { color: var(--blue); }
+    details.round { border: 1px solid var(--border); border-radius: 8px; margin: 6px 0; background: var(--bg); }
+    details.round summary { cursor: pointer; padding: 7px 10px; font-size: 12px; color: var(--muted); list-style: none; display: flex; gap: 8px; align-items: center; }
+    details.round summary::-webkit-details-marker { display: none; }
+    details.round summary::before { content: '▸'; color: var(--faint); }
+    details.round[open] summary::before { content: '▾'; }
+    details.round .body { padding: 2px 10px 10px; border-top: 1px solid var(--border); }
+    .d-stmt { font-size: 12px; line-height: 1.5; margin: 9px 0; color: var(--muted); }
+    .d-stmt b { display: block; font-size: 11px; margin-bottom: 1px; }
     .tabs { display: flex; gap: 4px; padding: 10px 12px 0; }
     .tabs button { flex: 1; background: none; border: none; border-bottom: 2px solid transparent; color: var(--faint); font: inherit; font-size: 12.5px; font-weight: 650; padding: 6px; cursor: pointer; }
     .tabs button.on { color: var(--text); border-bottom-color: var(--accent); }
@@ -143,9 +167,11 @@
 
         <div class="tabs">
             <button id="tab-steps" class="on" onclick="showTab('steps')">Step attempts</button>
+            <button id="tab-debate" style="display:none;" onclick="showTab('debate')">Debate</button>
             <button id="tab-state" onclick="showTab('state')">State bag</button>
         </div>
         <div id="panel-steps" class="side-section" style="border-bottom:0;"></div>
+        <div id="panel-debate" class="side-section" style="display:none; border-bottom:0;"></div>
         <div id="panel-state" class="side-section" style="display:none; border-bottom:0;">
             <pre id="state-json"></pre>
         </div>
@@ -196,6 +222,7 @@
                             </div>
                         </div>
                         <div class="detail">${esc(n.detail ?? '')}</div>
+                        ${isDebateNode(id) ? '<div class="rounds"></div>' : ''}
                         <div class="foot"><span class="dot"></span><span class="status-text">—</span></div>
                     </div>`;
             }).join('')}</div>`).join('');
@@ -341,6 +368,8 @@
         renderFailure();
         renderAttempts();
         renderState();
+        renderRoundPips();
+        renderDebateTab();
         drawEdges();
     }
 
@@ -493,8 +522,141 @@
             JSON.stringify(DATA.run.state ?? {}, null, 2);
     }
 
+    /* ---------- debate progress ---------- */
+
+    // Any step whose checkpoint holds a transcript array is a debate — the
+    // packaged debate() step and hand-rolled recipes alike.
+    function debateSteps() {
+        return Object.entries(DATA.run.state?.steps ?? {})
+            .filter(([, s]) => Array.isArray(s?.transcript) && s.transcript.length &&
+                s.transcript.every(e => e && typeof e === 'object' && 'speaker' in e && 'round' in e))
+            .map(([id, s]) => ({
+                id,
+                transcript: s.transcript,
+                judge: (s.judge && typeof s.judge === 'object') ? s.judge : null,
+                satisfied: s.satisfied,
+                iteration: s.iteration ?? 0,
+            }));
+    }
+
+    const SPEAKER_PALETTE = ['var(--accent)', 'var(--blue)', 'var(--green)', 'var(--amber)', 'var(--red)'];
+
+    function isDebateNode(id) {
+        const n = GRAPH?.nodes[id];
+        return n?.type === 'evaluate' && (n.detail ?? '').startsWith('debate ·');
+    }
+
+    // The round cap comes from the node's detail string ("… max 4 rounds"),
+    // which this package family authors on both sides of the contract.
+    function maxRounds(id) {
+        const m = (GRAPH?.nodes[id]?.detail ?? '').match(/max (\d+) round/);
+        return m ? parseInt(m[1], 10) : null;
+    }
+
+    function debateOutcome(d, max) {
+        const running = latestFor(d.id)?.status === 'running';
+
+        if (d.satisfied === true) return { cls: 'ok', text: `✓ consensus · round ${d.iteration}` };
+        if (running) return { cls: 'busy', text: `round ${d.iteration + 1}${max ? ' of ' + max : ''}…` };
+        if (d.satisfied === false && max && d.iteration >= max) return { cls: 'cap', text: '✕ no consensus · cap hit' };
+        if (d.iteration > 0) return { cls: '', text: `${d.iteration}${max ? ' of ' + max : ''} rounds` };
+        return { cls: '', text: '' };
+    }
+
+    // One pip per allowed round, filled as rounds commit; the judge's ruling
+    // becomes the node's outcome line. Progress lives in the flowchart — the
+    // transcript itself stays behind the Debate tab.
+    function renderRoundPips() {
+        for (const d of debateSteps()) {
+            const el = nodeEl(d.id)?.querySelector('.rounds');
+            if (!el) continue;
+
+            const max = maxRounds(d.id) ?? d.iteration;
+            const running = latestFor(d.id)?.status === 'running';
+            const outcome = debateOutcome(d, max);
+
+            let pips = '';
+            for (let i = 1; i <= max; i++) {
+                pips += `<span class="pip ${i <= d.iteration ? 'done' : (running && i === d.iteration + 1 ? 'now' : '')}" title="round ${i}"></span>`;
+            }
+
+            el.innerHTML = pips + (outcome.text ? `<span class="outcome ${outcome.cls}">${outcome.text}</span>` : '');
+
+            const node = nodeEl(d.id);
+            node.style.cursor = 'pointer';
+            node.onclick = () => showTab('debate');
+        }
+    }
+
+    // Rebuilt only when the debate itself changes, so accordions the viewer
+    // opened stay open across polls.
+    let debateKey = null;
+
+    function renderDebateTab() {
+        const debates = debateSteps();
+
+        document.getElementById('tab-debate').style.display = debates.length ? '' : 'none';
+
+        const panel = document.getElementById('panel-debate');
+
+        if (!debates.length) {
+            debateKey = null;
+            panel.innerHTML = '';
+            return;
+        }
+
+        const key = DATA.run.status + '|' + debates.map(d =>
+            [d.id, d.transcript.length, JSON.stringify(d.judge), latestFor(d.id)?.status].join(':')).join('|');
+
+        if (key === debateKey) return;
+        debateKey = key;
+
+        const open = new Set([...panel.querySelectorAll('details[open]')].map(el => el.dataset.key));
+
+        panel.innerHTML = debates.map(d => debateSection(d)).join('');
+
+        for (const el of panel.querySelectorAll('details')) {
+            if (open.has(el.dataset.key)) el.open = true;
+        }
+    }
+
+    function debateSection(d) {
+        const speakers = [...new Set(d.transcript.map(e => e.speaker))];
+        const color = s => SPEAKER_PALETTE[speakers.indexOf(s) % SPEAKER_PALETTE.length];
+        const outcome = debateOutcome(d, maxRounds(d.id));
+
+        const rounds = new Map();
+        for (const e of d.transcript) {
+            if (!rounds.has(e.round)) rounds.set(e.round, []);
+            rounds.get(e.round).push(e);
+        }
+
+        const verdict = !d.judge ? '' : `
+            <details class="round" data-key="${cssId(d.id)}-verdict">
+                <summary>⚖ Judge's verdict</summary>
+                <div class="body">${Object.entries(d.judge).map(([k, v]) => `
+                    <div class="d-stmt"><b>${esc(k)}</b>${esc(typeof v === 'string' ? v : JSON.stringify(v))}</div>`).join('')}</div>
+            </details>`;
+
+        const roundsHtml = [...rounds.entries()].map(([r, entries]) => `
+            <details class="round" data-key="${cssId(d.id)}-r${r}">
+                <summary>Round ${esc(String(r))} · ${entries.length} statement${entries.length === 1 ? '' : 's'}</summary>
+                <div class="body">${entries.map(e => `
+                    <div class="d-stmt">
+                        <b style="color:${color(e.speaker)};">${esc(e.speaker)}</b>
+                        ${e.text ? esc(e.text) : '<span class="faint">(no response)</span>'}
+                    </div>`).join('')}</div>
+            </details>`).join('');
+
+        return `
+            <h3>⚖ ${esc(d.id)} · ${speakers.map(esc).join(' vs ')}</h3>
+            ${outcome.text ? `<div class="strip ${outcome.cls}">${outcome.text}</div>` : ''}
+            ${verdict}
+            ${roundsHtml}`;
+    }
+
     function showTab(name) {
-        for (const t of ['steps', 'state']) {
+        for (const t of ['steps', 'debate', 'state']) {
             document.getElementById('tab-' + t).classList.toggle('on', t === name);
             document.getElementById('panel-' + t).style.display = t === name ? '' : 'none';
         }
