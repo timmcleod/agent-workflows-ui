@@ -2,7 +2,7 @@
 
 All notable changes to `timmcleod/agent-workflows-ui` are documented here.
 
-## Unreleased (v0.4.0)
+## v0.4.0 — 2026-07-30
 
 - **Debate progress in the flowchart.** A debate node now carries one pip per allowed round — filled as rounds commit, pulsing on the round in flight — plus an outcome line: `✓ consensus · round 3` (green), `✕ no consensus · cap hit` (amber), or `round 2 of 4…` while running. The flow's progress is readable at a glance without leaving the graph. Applies to any step checkpointing a `steps.{id}.transcript` array, so hand-rolled debate recipes get it too.
 - **Debate tab.** The transcript itself stays out of the way: a sidebar tab (shown only when a debate exists) with the outcome strip, the judge's verdict, and each round behind a collapsed accordion. Accordions the viewer opened stay open across polls; clicking the debate node switches to the tab.
