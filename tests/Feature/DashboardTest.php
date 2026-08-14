@@ -215,6 +215,48 @@ it('reports token totals per run', function () {
         ->assertJsonPath('runs.0.tokens', 300); // 2 steps × 150
 });
 
+it('exposes the per-call audit in the payload', function () {
+    authorizeDashboard();
+
+    $run = AgentWorkflow::start('signoff-flow', []);
+
+    $calls = [
+        [
+            'invocation_id' => 'inv-1',
+            'provider' => 'anthropic',
+            'model' => 'claude-sonnet-5',
+            'finish_reason' => 'tool_calls',
+            'usage' => ['prompt_tokens' => 2114, 'completion_tokens' => 40],
+            'tool_calls' => [['id' => 'toolu_1', 'name' => 'fetch_filings', 'arguments' => ['year' => 2026]]],
+            'tool_results' => [['id' => 'toolu_1', 'name' => 'fetch_filings', 'result' => ['count' => 3]]],
+        ],
+        [
+            'invocation_id' => 'inv-1',
+            'provider' => 'anthropic',
+            'model' => 'claude-opus-5',
+            'finish_reason' => 'stop',
+            'usage' => ['prompt_tokens' => 3480, 'completion_tokens' => 210],
+        ],
+    ];
+
+    $run->steps()->orderBy('id')->first()->update(['calls' => $calls]);
+
+    $this->getJson(route('agent-workflows.show.data', $run))
+        ->assertOk()
+        ->assertJsonPath('steps.0.calls', $calls)
+        ->assertJsonPath('steps.1.calls', null);
+});
+
+it('renders the run page with the call expander template', function () {
+    authorizeDashboard();
+
+    $run = AgentWorkflow::start('signoff-flow', []);
+
+    $this->get(route('agent-workflows.show', $run))
+        ->assertOk()
+        ->assertSee('callsExpander', false);
+});
+
 it('exposes the interrupt deadline for gates with a timeout', function () {
     authorizeDashboard();
 

@@ -13,6 +13,7 @@ It is strictly read-only. Acting on runs (approving sign-offs, delivering events
 
 - **Parked runs show what they are waiting for.** The interrupt reason, the deadline countdown, the awaited event name, and the expected response fields from the gate's schema.
 - **Failed runs show where and why.** The failed step, the failure reason, and every attempt in the audit trail.
+- **Every attempt opens up.** Each step attempt expands to the provider calls inside the turn: the responding model, per-call tokens, finish reason, and tool calls with their arguments and results (requires core >= 0.14, which records them; older cores simply show no expander).
 - **Live progress.** Steps light up as workers complete them, with token counts and the checkpointed state bag.
 
 The dashboard is plain server-rendered Blade with light polling: no build step, no assets to publish, nothing to go stale after upgrades.

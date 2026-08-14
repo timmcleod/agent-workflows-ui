@@ -129,6 +129,9 @@ class DashboardController
                 'attempt' => $step->attempt,
                 'error' => $step->error,
                 'usage' => $step->usage,
+                // Per-provider-call audit (core >= 0.14); null on older cores
+                // and on rows written before the calls migration ran.
+                'calls' => $step->calls,
                 'started_at' => $step->started_at?->toIso8601String(),
                 'finished_at' => $step->finished_at?->toIso8601String(),
             ])->all(),

@@ -439,7 +439,56 @@
             </div>`;
     }
 
+    // One provider call inside an attempt: origin line, invocation id, tools.
+    // Tool arguments and results are present only under the core's "full"
+    // audit mode; absent keys simply render nothing.
+    function callDetail(call) {
+        const origin = [call.model ?? call.provider ?? '?', call.finish_reason, (tokensOf(call.usage) ?? 0).toLocaleString() + ' tok']
+            .filter(Boolean).join(' · ');
+
+        const inv = call.invocation_id
+            ? `<span class="mono faint" style="font-size:10.5px;" title="${esc(call.invocation_id)}">inv …${esc(call.invocation_id.slice(-8))}</span>`
+            : '';
+
+        const payload = obj => obj === undefined
+            ? ''
+            : `<pre class="mono" style="margin:3px 0 0; white-space:pre-wrap; word-break:break-word; font-size:11px; color:var(--faint);">${esc(JSON.stringify(obj, null, 2))}</pre>`;
+
+        const tools = (call.tool_calls ?? []).map(t => `
+            <div style="margin-top:5px; font-size:11.5px;">⚒ <span class="mono">${esc(t.name)}</span>${payload(t.arguments)}</div>`).join('');
+
+        const results = (call.tool_results ?? []).filter(r => r.result !== undefined || r.denied).map(r => `
+            <div style="margin-top:5px; font-size:11.5px;">${r.denied ? '⛔' : '↩'} <span class="mono">${esc(r.name)}</span>${payload(r.result)}</div>`).join('');
+
+        return `
+            <div class="d-stmt">
+                <b>${esc(origin)}</b>
+                ${inv}
+                ${tools}
+                ${results}
+            </div>`;
+    }
+
+    function callsExpander(s) {
+        if (!Array.isArray(s.calls) || !s.calls.length) return '';
+
+        const tokens = s.calls.reduce((sum, c) => sum + (tokensOf(c.usage) ?? 0), 0);
+
+        return `
+            <tr><td colspan="4" style="padding:0 4px 6px;">
+                <details class="round" data-key="calls-${cssId(s.step_id)}-${s.attempt}">
+                    <summary>${s.calls.length} call${s.calls.length === 1 ? '' : 's'}${tokens ? ' · ' + tokens.toLocaleString() + ' tok' : ''}</summary>
+                    <div class="body">${s.calls.map(callDetail).join('')}</div>
+                </details>
+            </td></tr>`;
+    }
+
     function renderAttempts() {
+        const panel = document.getElementById('panel-steps');
+
+        // Rebuilt every poll; keep whichever call expanders the viewer opened.
+        const open = new Set([...panel.querySelectorAll('details[open]')].map(el => el.dataset.key));
+
         const rows = DATA.steps.map(s => `
             <tr>
                 <td class="mono">${esc(s.step_id)}</td>
@@ -447,11 +496,16 @@
                 <td class="muted">#${s.attempt}</td>
                 <td class="muted">${s.finished_at ? duration(s.started_at, s.finished_at) : '—'}</td>
             </tr>
-            ${s.error ? `<tr><td colspan="4" class="err">${esc(s.error)}</td></tr>` : ''}`).join('');
+            ${s.error ? `<tr><td colspan="4" class="err">${esc(s.error)}</td></tr>` : ''}
+            ${callsExpander(s)}`).join('');
 
-        document.getElementById('panel-steps').innerHTML = DATA.steps.length
+        panel.innerHTML = DATA.steps.length
             ? `<table class="attempts"><tbody>${rows}</tbody></table>`
             : '<div class="faint">No steps have executed yet.</div>';
+
+        for (const el of panel.querySelectorAll('details')) {
+            if (open.has(el.dataset.key)) el.open = true;
+        }
     }
 
     function renderState() {
