@@ -2,6 +2,16 @@
 
 All notable changes to `timmcleod/agent-workflows-ui` are documented here.
 
+## v0.5.0 - 2026-08-14
+
+The dashboard is now strictly read-only: it observes runs and never acts on them.
+
+- **Removed: all four dashboard actions.** The schema-generated approval form (`resume`), the deliver-event form, the retry button, and the cancel button are gone, along with their POST routes (`agent-workflows.resume`, `.deliver`, `.retry`, `.cancel`). Acting on a run belongs in your application, where it carries your own authorization and audit rules: `$run->resume([...])`, `$run->deliverEvent(...)`, `$run->retry()`, `$run->cancel()`.
+- Parked runs keep a full read-only interrupt panel: the reason, the deadline countdown, the awaited event name, the expected response fields from the gate's schema, and the interrupt context. Failed runs keep the failure panel with the failed step and reason. The `show.data` JSON payload is unchanged, so anything you built on it keeps working.
+- **Who this breaks:** anyone who approved sign-offs, delivered events, retried, or cancelled from the browser, or scripted against the POST endpoints. Move those calls into a controller in your application.
+- **Upgrade note if you published the views:** copies published with `php artisan vendor:publish --tag=agent-workflows-ui-views` still call `route('agent-workflows.resume')` and friends, which now throws `RouteNotFoundException` on every run page. Delete `resources/views/vendor/agent-workflows-ui` and re-publish, or port your customizations onto the v0.5.0 views.
+- The screenshot in the README still shows the old approval form; a re-capture follows.
+
 ## v0.4.2 — 2026-08-14
 
 - Compatibility: allow `timmcleod/agent-workflows` `^0.13` (singleton keys, run groups, progress) and `^0.14` (per-call audit). No dashboard changes, no schema changes. Note for hosts upgrading core: run `php artisan migrate`; core v0.13 and v0.14 each ship an additive migration.
