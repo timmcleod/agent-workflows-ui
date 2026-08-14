@@ -10,7 +10,6 @@ The dashboard is now strictly read-only: it observes runs and never acts on them
 - Parked runs keep a full read-only interrupt panel: the reason, the deadline countdown, the awaited event name, the expected response fields from the gate's schema, and the interrupt context. Failed runs keep the failure panel with the failed step and reason. The `show.data` JSON payload is unchanged, so anything you built on it keeps working.
 - **Who this breaks:** anyone who approved sign-offs, delivered events, retried, or cancelled from the browser, or scripted against the POST endpoints. Move those calls into a controller in your application.
 - **Upgrade note if you published the views:** copies published with `php artisan vendor:publish --tag=agent-workflows-ui-views` still call `route('agent-workflows.resume')` and friends, which now throws `RouteNotFoundException` on every run page. Delete `resources/views/vendor/agent-workflows-ui` and re-publish, or port your customizations onto the v0.5.0 views.
-- The screenshot in the README still shows the old approval form; a re-capture follows.
 
 ## v0.4.2 — 2026-08-14
 

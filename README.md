@@ -7,8 +7,6 @@ A read-only dashboard for [`timmcleod/agent-workflows`](https://github.com/timmc
 
 ![The dashboard: a completed run rendered as a flowchart, the taken branch highlighted and the untaken branch dimmed, with the step-attempt audit trail alongside](https://raw.githubusercontent.com/timmcleod/agent-workflows-ui/main/art/dashboard.png)
 
-*The screenshot predates v0.5.0; the sidebar approval form is now a read-only interrupt panel.*
-
 One run, most of the package: this workflow took the high-risk escalation branch (the auto-approve branch dimmed as skipped), parked at the human gate (the audit trail shows the gate interrupted on attempt #1, then completed on attempt #2 after sign-off arrived through the application's `resume()` call), and finished with the summary agent. Note every step shows exactly one execution: checkpointed results are never re-run, and their tokens are never paid twice.
 
 It is strictly read-only. Acting on runs (approving sign-offs, delivering events, retrying, cancelling) stays in your application through the core API: `$run->resume()`, `$run->deliverEvent()`, `$run->retry()`, `$run->cancel()`. The dashboard's job is the watching:
