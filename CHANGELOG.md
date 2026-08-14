@@ -2,6 +2,10 @@
 
 All notable changes to `timmcleod/agent-workflows-ui` are documented here.
 
+## v0.4.2 — 2026-08-14
+
+- Compatibility: allow `timmcleod/agent-workflows` `^0.13` (singleton keys, run groups, progress) and `^0.14` (per-call audit). No dashboard changes, no schema changes. Note for hosts upgrading core: run `php artisan migrate`; core v0.13 and v0.14 each ship an additive migration.
+
 ## v0.4.1 — 2026-07-31
 
 - Compatibility: allow `timmcleod/agent-workflows` `^0.12` (static `Workflow::start()` release). No dashboard changes, no schema changes.
