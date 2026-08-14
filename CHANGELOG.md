@@ -2,6 +2,13 @@
 
 All notable changes to `timmcleod/agent-workflows-ui` are documented here.
 
+## v0.5.1 - 2026-08-14
+
+Documentation only, no code changes.
+
+- Removes a README note wrongly claiming the screenshot predated the read-only dashboard. The screenshot shows a completed run, which renders identically on v0.5.0.
+- Restores the repository history to match Packagist's immutable v0.5.0 reference after an attempted re-tag was rejected. If you fetched between the two pushes, `git fetch` may report a forced update on main; the v0.5.0 tag again matches what Packagist serves.
+
 ## v0.5.0 - 2026-08-14
 
 The dashboard is now strictly read-only: it observes runs and never acts on them.
