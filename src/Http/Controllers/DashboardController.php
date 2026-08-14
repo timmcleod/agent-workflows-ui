@@ -3,15 +3,18 @@
 namespace TimMcLeod\AgentWorkflowsUi\Http\Controllers;
 
 use Illuminate\Http\JsonResponse;
-use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 use TimMcLeod\AgentWorkflows\Enums\RunStatus;
-use TimMcLeod\AgentWorkflows\Exceptions\WorkflowException;
 use TimMcLeod\AgentWorkflows\Models\WorkflowRun;
 use TimMcLeod\AgentWorkflows\WorkflowRegistry;
 
+/**
+ * Strictly read-only: the dashboard observes runs and never acts on them.
+ * Resuming, delivering events, retrying, and cancelling belong to the host
+ * application through the core API, where they carry its authorization and
+ * audit rules.
+ */
 class DashboardController
 {
     public function __construct(protected WorkflowRegistry $registry) {}
@@ -78,91 +81,6 @@ class DashboardController
     public function showData(WorkflowRun $run): JsonResponse
     {
         return response()->json($this->runPayload($run));
-    }
-
-    public function resume(Request $request, WorkflowRun $run): RedirectResponse
-    {
-        $payload = collect($request->except(['_token']))
-            ->map(fn ($value) => $value === '' ? null : $value)
-            ->all();
-
-        // Form posts arrive as strings; make booleans real booleans before
-        // they hit the interrupt's validation schema and the state bag.
-        $interrupt = $run->interrupts()->whereNull('resolved_at')->latest('id')->first();
-        $schema = $interrupt !== null ? ($interrupt->response_schema ?? []) : [];
-
-        foreach ($schema as $field => $rules) {
-            $rules = is_array($rules) ? implode('|', $rules) : $rules;
-
-            if (str_contains($rules, 'boolean') && ($payload[$field] ?? null) !== null) {
-                $payload[$field] = filter_var($payload[$field], FILTER_VALIDATE_BOOLEAN);
-            }
-        }
-
-        try {
-            $run->resume($payload, by: $request->user());
-        } catch (ValidationException $e) {
-            return back()->withErrors($e->errors());
-        } catch (WorkflowException $e) {
-            return back()->withErrors(['resume' => $e->getMessage()]);
-        }
-
-        return redirect()->route('agent-workflows.show', $run);
-    }
-
-    public function retry(WorkflowRun $run): RedirectResponse
-    {
-        try {
-            $run->retry();
-        } catch (WorkflowException $e) {
-            return back()->withErrors(['retry' => $e->getMessage()]);
-        }
-
-        return redirect()->route('agent-workflows.show', $run);
-    }
-
-    /**
-     * Deliver the application event a run parked by awaitEvent() is waiting
-     * for, with an optional JSON payload merged into state.
-     */
-    public function deliver(Request $request, WorkflowRun $run): RedirectResponse
-    {
-        $raw = trim((string) $request->input('payload', ''));
-
-        $payload = [];
-
-        if ($raw !== '') {
-            $payload = json_decode($raw, true);
-
-            if (! is_array($payload)) {
-                return back()->withErrors(['deliver' => 'The payload must be a JSON object.']);
-            }
-        }
-
-        $event = $run->interrupts()->whereNull('resolved_at')->latest('id')->first()?->context['event'] ?? null;
-
-        if ($event === null) {
-            return back()->withErrors(['deliver' => 'This run is not waiting for an event.']);
-        }
-
-        try {
-            $run->deliverEvent($event, $payload);
-        } catch (WorkflowException $e) {
-            return back()->withErrors(['deliver' => $e->getMessage()]);
-        }
-
-        return redirect()->route('agent-workflows.show', $run);
-    }
-
-    public function cancel(WorkflowRun $run): RedirectResponse
-    {
-        try {
-            $run->cancel();
-        } catch (WorkflowException $e) {
-            return back()->withErrors(['cancel' => $e->getMessage()]);
-        }
-
-        return redirect()->route('agent-workflows.show', $run);
     }
 
     /**

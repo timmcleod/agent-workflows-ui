@@ -1,7 +1,7 @@
 {
     "name": "timmcleod/agent-workflows-ui",
-    "description": "A dashboard for timmcleod/agent-workflows — visualize runs, approve interrupts, and retry failures from the browser.",
-    "keywords": ["laravel", "ai", "agents", "workflows", "dashboard", "ui", "monitoring"],
+    "description": "A read-only dashboard for timmcleod/agent-workflows: watch runs as live flowcharts with step status, interrupts, failures, and token usage.",
+    "keywords": ["laravel", "ai", "agents", "workflows", "dashboard", "ui", "monitoring", "observability", "read-only"],
     "license": "MIT",
     "authors": [
         {
@@ -41,7 +41,7 @@
     },
     "extra": {
         "branch-alias": {
-            "dev-main": "0.4.x-dev"
+            "dev-main": "0.5.x-dev"
         },
         "laravel": {
             "providers": [

@@ -1,6 +1,7 @@
 <?php
 
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Route;
 use TimMcLeod\AgentWorkflows\Enums\RunStatus;
 use TimMcLeod\AgentWorkflows\Facades\AgentWorkflow;
 use TimMcLeod\AgentWorkflows\WorkflowDefinition;
@@ -76,38 +77,38 @@ it('renders runs whose workflow is not registered without a graph', function () 
         ->assertJsonPath('run.drifted', false);
 });
 
-it('resumes an awaiting run, coercing form booleans against the schema', function () {
-    authorizeDashboard();
-
-    $run = AgentWorkflow::start('signoff-flow', []);
-
-    $this->post(route('agent-workflows.resume', $run), [
-        'approved' => '1',
-        'notes' => 'LGTM',
-    ])->assertRedirect(route('agent-workflows.show', $run));
-
-    $run->refresh();
-
-    expect($run->status)->toBe(RunStatus::Completed)
-        ->and($run->state['approved'])->toBeTrue()
-        ->and($run->state['notes'])->toBe('LGTM')
-        ->and($run->state['flaky_ran'])->toBeTrue();
+it('registers no mutating routes', function () {
+    foreach (['resume', 'deliver', 'retry', 'cancel'] as $action) {
+        expect(Route::has('agent-workflows.'.$action))->toBeFalse();
+    }
 });
 
-it('returns validation errors to the form when the resume payload fails the schema', function () {
+it('returns 404 for the removed action endpoints', function () {
     authorizeDashboard();
 
     $run = AgentWorkflow::start('signoff-flow', []);
 
-    $this->from(route('agent-workflows.show', $run))
-        ->post(route('agent-workflows.resume', $run), ['notes' => 'missing approval'])
-        ->assertRedirect(route('agent-workflows.show', $run))
-        ->assertSessionHasErrors('approved');
+    foreach (['resume', 'deliver', 'retry', 'cancel'] as $action) {
+        $this->post("/agent-workflows/runs/{$run->id}/{$action}")->assertNotFound();
+    }
 
     expect($run->refresh()->status)->toBe(RunStatus::AwaitingHuman);
 });
 
-it('retries a failed run from the dashboard', function () {
+it('shows the read-only hints instead of action forms on the run page', function () {
+    authorizeDashboard();
+
+    $run = AgentWorkflow::start('signoff-flow', []);
+
+    $this->get(route('agent-workflows.show', $run))
+        ->assertOk()
+        ->assertSee('$run->resume', false)
+        ->assertSee('$run->retry()', false)
+        ->assertDontSee("runs/{$run->id}/resume")
+        ->assertDontSee("runs/{$run->id}/retry");
+});
+
+it('exposes failure details in the payload for the read-only failure panel', function () {
     authorizeDashboard();
 
     FlakyStep::$fail = true;
@@ -120,35 +121,11 @@ it('retries a failed run from the dashboard', function () {
         // The sync queue unwinds the step failure into the caller.
     }
 
-    expect($run->refresh()->status)->toBe(RunStatus::Failed);
-
-    FlakyStep::$fail = false;
-
-    $this->post(route('agent-workflows.retry', $run))
-        ->assertRedirect(route('agent-workflows.show', $run));
-
-    expect($run->refresh()->status)->toBe(RunStatus::Completed);
-});
-
-it('rejects retrying a run that is not failed', function () {
-    authorizeDashboard();
-
-    $run = AgentWorkflow::start('signoff-flow', []);
-
-    $this->from(route('agent-workflows.show', $run))
-        ->post(route('agent-workflows.retry', $run))
-        ->assertSessionHasErrors('retry');
-});
-
-it('cancels a parked run from the dashboard', function () {
-    authorizeDashboard();
-
-    $run = AgentWorkflow::start('signoff-flow', []);
-
-    $this->post(route('agent-workflows.cancel', $run))
-        ->assertRedirect(route('agent-workflows.show', $run));
-
-    expect($run->refresh()->status)->toBe(RunStatus::Cancelled);
+    $this->getJson(route('agent-workflows.show.data', $run))
+        ->assertOk()
+        ->assertJsonPath('run.status', 'failed')
+        ->assertJsonPath('run.failed_step', 'FlakyStep')
+        ->assertJsonPath('run.failure_reason', 'Flaky step exploded.');
 });
 
 it('marks drifted runs in the payload', function () {
@@ -251,7 +228,7 @@ it('exposes the interrupt deadline for gates with a timeout', function () {
     expect($data['interrupt']['timeout_at'])->not->toBeNull();
 });
 
-it('delivers an awaited event with a JSON payload from the dashboard', function () {
+it('keeps event gate details in the payload for the read-only panel', function () {
     authorizeDashboard();
 
     defineWorkflow('event-flow', fn (WorkflowDefinition $workflow) => $workflow
@@ -262,30 +239,10 @@ it('delivers an awaited event with a JSON payload from the dashboard', function 
 
     expect($run->status)->toBe(RunStatus::AwaitingEvent);
 
-    $this->post(route('agent-workflows.deliver', $run), [
-        'payload' => '{"transaction_id": "tx_42"}',
-    ])->assertRedirect(route('agent-workflows.show', $run));
-
-    $run->refresh();
-
-    expect($run->status)->toBe(RunStatus::Completed)
-        ->and($run->state['transaction_id'])->toBe('tx_42')
-        ->and($run->state['prepared'])->toBeTrue();
-});
-
-it('rejects a malformed event payload without touching the run', function () {
-    authorizeDashboard();
-
-    defineWorkflow('event-flow-2', fn (WorkflowDefinition $workflow) => $workflow
-        ->awaitEvent('payment.settled'));
-
-    $run = AgentWorkflow::start('event-flow-2', []);
-
-    $this->from(route('agent-workflows.show', $run))
-        ->post(route('agent-workflows.deliver', $run), ['payload' => 'not json'])
-        ->assertSessionHasErrors('deliver');
-
-    expect($run->refresh()->status)->toBe(RunStatus::AwaitingEvent);
+    $this->getJson(route('agent-workflows.show.data', $run))
+        ->assertOk()
+        ->assertJsonPath('interrupt.type', 'event')
+        ->assertJsonPath('interrupt.context.event', 'payment.settled');
 });
 
 it('honours the configured path prefix', function () {

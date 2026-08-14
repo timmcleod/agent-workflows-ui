@@ -9,15 +9,6 @@
     <span id="run-tokens" class="faint" style="font-size:12px;"></span>
     <span id="drift-badge" class="chip" style="display:none;" title="The registered definition no longer matches the one this run started with">⚠ definition drift</span>
     <span class="spacer"></span>
-    <form id="retry-form" method="POST" action="{{ route('agent-workflows.retry', $run) }}" style="display:none;">
-        @csrf
-        <button class="btn primary">↺ Retry failed step</button>
-    </form>
-    <form id="cancel-form" method="POST" action="{{ route('agent-workflows.cancel', $run) }}" style="display:none;"
-          onsubmit="return confirm('Cancel this run?');">
-        @csrf
-        <button class="btn subtle">✕ Cancel run</button>
-    </form>
 @endsection
 
 @section('style')
@@ -83,17 +74,6 @@
 
     #interrupt-panel { background: color-mix(in srgb, var(--amber) 7%, var(--panel)); }
     #interrupt-panel .reason { font-weight: 650; margin-bottom: 12px; }
-    #interrupt-panel label { display: block; font-size: 12px; color: var(--muted); margin: 10px 0 4px; }
-    #interrupt-panel textarea, #interrupt-panel input[type=text], #interrupt-panel input[type=number] {
-        width: 100%; background: var(--bg); color: var(--text); border: 1px solid var(--border);
-        border-radius: 8px; padding: 8px 10px; font: inherit; font-size: 13px;
-    }
-    .seg { display: flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
-    .seg label { flex: 1; margin: 0 !important; text-align: center; padding: 7px 0; cursor: pointer; font-size: 13px; color: var(--muted); background: var(--bg); }
-    .seg input { display: none; }
-    .seg input:checked + span { color: var(--text); font-weight: 650; }
-    .seg label:has(input:checked) { background: var(--panel-2); }
-    .seg label + label { border-left: 1px solid var(--border); }
 
     #failure-panel { background: color-mix(in srgb, var(--red) 7%, var(--panel)); }
     #failure-panel .reason { color: #ffb4ad; font-size: 13px; }
@@ -184,8 +164,6 @@
     const GRAPH = @json($graph);
     let DATA = @json($data);
 
-    const RESUME_URL = '{{ route('agent-workflows.resume', $run) }}';
-    const DELIVER_URL = '{{ route('agent-workflows.deliver', $run) }}';
     const DATA_URL = '{{ route('agent-workflows.show.data', $run) }}';
 
     const ICONS = {
@@ -364,7 +342,6 @@
 
         renderHeader();
         renderInterrupt();
-        renderDeadline();
         renderFailure();
         renderAttempts();
         renderState();
@@ -384,104 +361,63 @@
 
         document.getElementById('drift-badge').style.display = DATA.run.drifted ? '' : 'none';
         document.getElementById('stalled-panel').style.display = DATA.run.stalled ? '' : 'none';
-        document.getElementById('retry-form').style.display = DATA.run.status === 'failed' ? '' : 'none';
-        document.getElementById('cancel-form').style.display =
-            ['completed', 'cancelled'].includes(DATA.run.status) ? 'none' : '';
     }
 
-    // Rebuilding the panel's innerHTML on every poll would wipe whatever
-    // the reviewer has typed or selected, so it only re-renders when the
-    // interrupt itself changes.
-    let interruptKey = null;
-
+    // Read-only: the panel shows what the run is waiting for. Acting on it
+    // (resume, deliverEvent) happens in the application, not the dashboard.
     function renderInterrupt() {
         const panel = document.getElementById('interrupt-panel');
 
         if (!DATA.interrupt || !['awaiting_human', 'awaiting_event'].includes(DATA.run.status)) {
-            interruptKey = null;
             panel.style.display = 'none';
             return;
         }
 
-        const key = [DATA.run.status, DATA.interrupt.step_id, DATA.interrupt.type, DATA.interrupt.created_at].join('|');
-
-        if (key === interruptKey) {
-            return;
-        }
-
-        interruptKey = key;
         panel.style.display = '';
+
+        const deadline = `<div class="faint" style="font-size:12px; margin:-6px 0 8px;">${deadlineText(DATA.interrupt.timeout_at)}</div>`;
+
+        const context = DATA.interrupt.context && Object.keys(DATA.interrupt.context).length
+            ? `<pre class="mono" style="margin:10px 0 0; white-space:pre-wrap; word-break:break-word; font-size:11.5px; color:var(--muted);">${esc(JSON.stringify(DATA.interrupt.context, null, 2))}</pre>`
+            : '';
 
         if (DATA.interrupt.type === 'event') {
             panel.innerHTML = `
                 <h3>⚡ Waiting for event</h3>
                 <div class="reason">${esc(DATA.interrupt.reason ?? '')}</div>
-                <form method="POST" action="${DELIVER_URL}">
-                    <input type="hidden" name="_token" value="${CSRF}">
-                    <label>payload <span class="faint">(JSON object, optional)</span></label>
-                    <textarea name="payload" rows="3" placeholder='{"transaction_id": "…"}'></textarea>
-                    <div style="margin-top:14px;">
-                        <button class="btn good" style="width:100%;">⚡ Deliver ${esc(DATA.interrupt.context?.event ?? 'event')}</button>
-                    </div>
-                    <div class="faint" style="margin-top:8px; font-size:11.5px;">
-                        Merged into state, then the run continues — same as
-                        <span class="mono">$run->deliverEvent()</span>.
-                    </div>
-                </form>`;
+                ${deadline}
+                <div class="mono">${esc(DATA.interrupt.context?.event ?? '?')}</div>
+                <div class="faint" style="margin-top:10px; font-size:11.5px;">
+                    Deliver it from your application:
+                    <span class="mono">$run->deliverEvent('${esc(DATA.interrupt.context?.event ?? '...')}', [...])</span>
+                </div>`;
             return;
         }
 
-        const fields = Object.entries(DATA.interrupt.response_schema ?? {}).map(([name, rules]) => {
-            const r = Array.isArray(rules) ? rules.join('|') : String(rules);
-
-            if (r.includes('boolean')) {
-                return `
-                    <label>${esc(name)}</label>
-                    <div class="seg">
-                        <label><input type="radio" name="${esc(name)}" value="1" checked><span>✓ yes</span></label>
-                        <label><input type="radio" name="${esc(name)}" value="0"><span>✕ no</span></label>
-                    </div>`;
-            }
-            if (r.includes('integer') || r.includes('numeric')) {
-                return `<label>${esc(name)}${r.includes('required') ? ' *' : ''}</label>
-                        <input type="number" name="${esc(name)}">`;
-            }
-            return `<label>${esc(name)}${r.includes('required') ? ' *' : ''}</label>
-                    <textarea name="${esc(name)}" rows="2"></textarea>`;
-        }).join('');
+        const fields = Object.entries(DATA.interrupt.response_schema ?? {}).map(([name, rules]) => `
+            <tr>
+                <td class="mono">${esc(name)}</td>
+                <td class="faint">${esc(Array.isArray(rules) ? rules.join('|') : String(rules))}</td>
+            </tr>`).join('');
 
         panel.innerHTML = `
             <h3>✋ Human input required</h3>
             <div class="reason">${esc(DATA.interrupt.reason ?? 'Waiting for a response')}</div>
-            <div id="interrupt-deadline" class="faint" style="font-size:12px; margin:-6px 0 4px;"></div>
-            <form method="POST" action="${RESUME_URL}">
-                <input type="hidden" name="_token" value="${CSRF}">
-                ${fields}
-                <div style="margin-top:14px; display:flex; gap:8px;">
-                    <button class="btn good" style="flex:1;">Resume run</button>
-                </div>
-                <div class="faint" style="margin-top:8px; font-size:11.5px;">
-                    Validated against the step's schema, merged into state, then the run continues.
-                </div>
-            </form>`;
+            ${deadline}
+            ${fields ? `<table class="attempts"><tbody>${fields}</tbody></table>` : ''}
+            ${context}
+            <div class="faint" style="margin-top:10px; font-size:11.5px;">
+                Answer it from your application: <span class="mono">$run->resume([...])</span>
+            </div>`;
     }
 
-    // Updated outside renderInterrupt so the countdown stays fresh without
-    // rebuilding the form (which would wipe the reviewer's input).
-    function renderDeadline() {
-        const el = document.getElementById('interrupt-deadline');
-        if (!el) return;
-
-        const at = DATA.interrupt?.timeout_at;
-
-        if (!at) {
-            el.textContent = '';
-            return;
-        }
+    function deadlineText(at) {
+        if (!at) return '';
 
         const s = (new Date(at) - Date.now()) / 1000;
-        el.textContent = s <= 0
-            ? '⏳ Past its deadline — the next sweep acts on it.'
+
+        return s <= 0
+            ? '⏳ Past its deadline; the next sweep acts on it.'
             : '⏳ Times out in ' + (s < 3600 ? Math.ceil(s / 60) + 'm' : s < 86400 ? Math.round(s / 3600) + 'h' : Math.round(s / 86400) + 'd');
     }
 
@@ -498,7 +434,8 @@
             <h3>✕ Run failed at <span class="mono">${esc(DATA.run.failed_step ?? '?')}</span></h3>
             <div class="reason">${esc(DATA.run.failure_reason ?? '')}</div>
             <div class="faint" style="margin-top:8px; font-size:11.5px;">
-                Earlier steps keep their checkpointed results — retry re-runs only the failed step.
+                Earlier steps keep their checkpointed results. Retry it from your application:
+                <span class="mono">$run->retry()</span> re-runs only the failed step.
             </div>`;
     }
 

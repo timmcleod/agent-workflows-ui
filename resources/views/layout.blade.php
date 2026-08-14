@@ -3,7 +3,6 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>@yield('title', 'Agent Workflows')</title>
     <style>
         :root {
@@ -61,29 +60,9 @@
         .chip.cancelled { color: var(--faint); }
         @keyframes pulse { 50% { opacity: .25; } }
 
-        .btn {
-            display: inline-flex; align-items: center; gap: 7px;
-            padding: 7px 14px; border-radius: 8px; cursor: pointer;
-            border: 1px solid var(--border); background: var(--panel-2); color: var(--text);
-            font-size: 13px; font-weight: 600;
-        }
-        .btn:hover { border-color: var(--faint); }
-        .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
-        .btn.primary:hover { filter: brightness(1.08); }
-        .btn.good { background: var(--green); border-color: var(--green); color: #04260c; }
-        .btn.bad { background: transparent; border-color: color-mix(in srgb, var(--red) 55%, transparent); color: var(--red); }
-        .btn.subtle { background: transparent; }
-
         .mono { font-family: var(--mono); font-size: 12.5px; }
         .muted { color: var(--muted); }
         .faint { color: var(--faint); }
-
-        .banner {
-            margin: 14px 20px 0; padding: 10px 14px; border-radius: 8px;
-            border: 1px solid color-mix(in srgb, var(--red) 45%, transparent);
-            background: color-mix(in srgb, var(--red) 12%, var(--panel));
-            color: #ffb4ad; font-size: 13px;
-        }
     </style>
     @yield('style')
 </head>
@@ -93,15 +72,9 @@
     @yield('topbar')
 </div>
 
-@if ($errors->any())
-    <div class="banner">{{ implode(' ', $errors->all()) }}</div>
-@endif
-
 @yield('content')
 
 <script>
-    const CSRF = document.querySelector('meta[name="csrf-token"]').content;
-
     function timeAgo(iso) {
         if (!iso) return '—';
         const s = Math.max(0, (Date.now() - new Date(iso)) / 1000);
