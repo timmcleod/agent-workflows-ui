@@ -2,6 +2,10 @@
 
 All notable changes to `timmcleod/agent-workflows-ui` are documented here.
 
+## v0.6.1 - 2026-08-15
+
+- Compatibility: allow `timmcleod/agent-workflows` `^0.15` (positional prompts, `{{ placeholder }}` templates, conventional prompt methods). No dashboard changes, no schema changes.
+
 ## v0.6.0 - 2026-08-14
 
 - **Per-call audit on step attempts.** Each attempt in the sidebar expands to the provider calls made inside the turn: the responding model (under failover, not necessarily the one requested), per-call token usage, the finish reason, the SDK invocation id, and each tool call with its arguments and results. Calls sharing an invocation id share their id label, so a debate round's speakers and judge read as distinct groups on one row. Data comes from core v0.14's `calls` column; on older cores, or rows written before its migration ran, the expander simply does not appear. Tool arguments and results honor the core's `audit.step_calls` config (`minimal` records only ids and names, so that is all the dashboard shows).
