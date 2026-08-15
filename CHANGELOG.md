@@ -2,6 +2,10 @@
 
 All notable changes to `timmcleod/agent-workflows-ui` are documented here.
 
+## v0.6.2 - 2026-08-15
+
+- Compatibility: allow `timmcleod/agent-workflows` `^0.16` (per-branch prompts in `parallel()`). No dashboard changes, no schema changes.
+
 ## v0.6.1 - 2026-08-15
 
 - Compatibility: allow `timmcleod/agent-workflows` `^0.15` (positional prompts, `{{ placeholder }}` templates, conventional prompt methods). No dashboard changes, no schema changes.
